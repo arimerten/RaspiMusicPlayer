@@ -63,8 +63,8 @@ disp = DriverClass(spi, **display_kwargs)
 # library's default. White background + wrong colors (e.g. green shows as
 # purple) is the classic symptom -- this line fixes it.
 if USE_ST7789:
-    disp.write(0x20)  # Display Inversion ON
-    # If this makes colors WORSE instead of better, use 0x20 (Inversion OFF) instead
+    disp.write(0x20)  # Display Inversion OFF
+    # If this makes colors WORSE instead of better, use 0x21 (Inversion ON) instead
 
 # --- Draw: black background, a circle, a square, and some text ---
 frame = Image.new("RGB", (WIDTH, HEIGHT), "black")

@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+
+# Music stays out of git (too big for GitHub); copy it onto the Pi separately
+music/*
+!music/.gitkeep
+!music/Playlists/
+music/Playlists/*
+!music/Playlists/.gitkeep

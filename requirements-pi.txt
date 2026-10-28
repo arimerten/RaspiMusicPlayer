@@ -1,0 +1,5 @@
+Pillow
+mutagen
+adafruit-blinka
+adafruit-circuitpython-rgb-display
+gpiozero
