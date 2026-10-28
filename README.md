@@ -8,7 +8,7 @@ Screen: VCC → 3.3V · GND → GND · CS → GPIO8 (CE0) · RESET → GPIO25 ·
 
 Rotary knob: CLK → GPIO5 · DT → GPIO6 · SW → GPIO13 · + → 3.3V · GND → GND
 
-Turn to scroll (or change volume while playing), press to select (or play/pause), hold to go back. On the radio, turn to pick a key and press it; TUNE and VOL then follow the knob until pressed again.
+Turn to scroll (or change volume while playing), press to select (or play/pause), hold to go back. On the radio, turn to tune and press to open your favourites.
 
 ## Pi setup
 

@@ -9,8 +9,8 @@ The player has one rotary knob with a push button, so everything is driven by fo
 
 Menus:        turn = move up/down the list, press = open / play, hold = back a page
 Now playing:  turn = volume, press = play/pause, hold = back to the menus
-Radio:        turn = pick a key (TUNE, VOL or a favourite), press = use it, hold = back.
-              Pressing TUNE or VOL makes the knob change that until it's pressed again.
+Radio:        turn = tune, press = open favourites, hold = back
+Favourites:   turn = move up/down the list, press = tune to it, hold = close
 """
 
 from dataclasses import dataclass, field
@@ -24,7 +24,6 @@ VOLUME_STEP = 5
 
 # Favourite stations, in tenths of a MHz (1057 = 105.7 MHz)
 FAVOURITES = [1057, 945]
-RADIO_CONTROLS = ["TUNE", "VOL"]  # keys before the favourites
 
 MENU = "menu"
 NOW_PLAYING = "now playing"
@@ -60,12 +59,8 @@ class Page:
 class Radio:
     frequency: int = FAVOURITES[0]  # tenths of a MHz
     favourites: list = field(default_factory=lambda: list(FAVOURITES))
-    focus: int = 0                  # index into keys
-    adjusting: bool = False         # True while the knob turns the focused key's setting
-
-    @property
-    def keys(self):
-        return RADIO_CONTROLS + [format_mhz(f) for f in self.favourites]
+    favourites_open: bool = False   # the favourites list is popped up
+    selected: int = 0               # highlighted favourite in that list
 
 
 def plural(count, word):
@@ -107,8 +102,8 @@ class App:
                     self.pages.append(new_page)
 
     def back(self):
-        if self.screen == RADIO and self.radio.adjusting:
-            self.radio.adjusting = False
+        if self.screen == RADIO and self.radio.favourites_open:
+            self.radio.favourites_open = False
         elif self.screen != MENU:
             self.screen = MENU
             self.pages[0].items = self.home_items()  # the radio frequency may have changed
@@ -135,8 +130,7 @@ class App:
             return render_now_playing(self.track, self.volume, now)
         if self.screen == RADIO:
             radio = self.radio
-            return render_radio(radio.frequency, radio.favourites, radio.keys, radio.focus,
-                                radio.adjusting, self.volume, now)
+            return render_radio(radio.frequency, radio.favourites, radio.favourites_open, radio.selected, now)
         page = self.pages[-1]
         rows = [(item.label, item.detail) for item in page.items]
         return render_list(page.title, rows, page.selected, page.top, now, page.empty_text)
@@ -153,19 +147,21 @@ class App:
 
     def turn_radio(self, step):
         radio = self.radio
-        if not radio.adjusting:
-            radio.focus = max(0, min(len(radio.keys) - 1, radio.focus + step))
-        elif radio.keys[radio.focus] == "TUNE":
-            radio.frequency = max(FM_MIN, min(FM_MAX, radio.frequency + step))
+        if radio.favourites_open:
+            radio.selected = max(0, min(len(radio.favourites) - 1, radio.selected + step))
         else:
-            self.change_volume(step)
+            radio.frequency = max(FM_MIN, min(FM_MAX, radio.frequency + step))
 
     def press_radio(self):
         radio = self.radio
-        if radio.focus < len(RADIO_CONTROLS):
-            radio.adjusting = not radio.adjusting
-        else:
-            radio.frequency = radio.favourites[radio.focus - len(RADIO_CONTROLS)]
+        if radio.favourites_open:
+            radio.frequency = radio.favourites[radio.selected]
+            radio.favourites_open = False
+        elif radio.favourites:
+            # Start on the station that's tuned in, if it's a favourite
+            if radio.frequency in radio.favourites:
+                radio.selected = radio.favourites.index(radio.frequency)
+            radio.favourites_open = True
 
     # ----- Playing -----
 

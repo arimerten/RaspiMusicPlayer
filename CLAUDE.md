@@ -42,12 +42,14 @@ Music player and FM radio (SDR, being added) for a Raspberry Pi 5 with a small S
 
 ## Radio screen layout
 
-Styled like an old wooden radio (colours in `screens.py`; the wood and dial are drawn once and cached by `radio_background()`).
+Old-school look on a black background (colours in `screens.py`; the static parts are drawn once and cached by `radio_background()`).
 
-- Top bar: `VOL n%`, `FM RADIO`, clock, in brass on dark wood.
+- Top bar: `FM RADIO` and the clock in brass, with a brass line under it. No volume on this screen (volume control comes later).
 - Cream tuning dial 87.5–108 MHz with a red needle; brass triangles mark favourites.
-- Amber readout of the frequency (unlit `188.8` behind it, "TUNING" lamp) and a 10-bar volume meter.
-- Push-button keys: TUNE, VOL, then each favourite (4 shown; scrolls if more). Turn picks a key (amber outline). Press TUNE or VOL to light it, then the knob tunes in 0.1 MHz steps or changes volume until pressed again (hold also stops). Pressing a favourite tunes to it; the tuned favourite stays pushed in. Hold = back to Home.
+- Large amber frequency readout in a dark box with a brass rim.
+- A cream push-button key labelled "★ FAVOURITES" (pressing the knob presses it).
+- Controls: turn = tune in 0.1 MHz steps, press = open favourites, hold = back to Home.
+- Favourites pop-up: brass-bordered list over the screen (5 rows, scrolls if more), selected row amber, a dot marks the station tuned in. Turn = move, press = tune to it and close, hold = close. Opens on the tuned station if it's a favourite.
 - No SDR control yet: `Radio.frequency` is what the SDR code should tune to.
 
 ## Things to check on real hardware
