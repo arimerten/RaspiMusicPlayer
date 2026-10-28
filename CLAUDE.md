@@ -1,6 +1,6 @@
 # RaspiMusicPlayer
 
-Music player for a Raspberry Pi 5 with a small SPI colour screen and physical buttons. Screens are designed on a Windows laptop in a Tkinter simulator, pushed to GitHub, then pulled and tested on the Pi.
+Music player and FM radio (SDR, being added) for a Raspberry Pi 5 with a small SPI colour screen and a rotary knob. Screens are designed on a Windows laptop in a Tkinter simulator, pushed to GitHub, then pulled and tested on the Pi.
 
 ## Golden rule
 
@@ -8,9 +8,9 @@ Music player for a Raspberry Pi 5 with a small SPI colour screen and physical bu
 
 ## Files
 
-- `screens.py`: draws screens as PIL images at 320×240 (landscape). Holds the `Track` dataclass, fonts and layout constants. Screens: `render_now_playing(track, volume, now=None)` and `render_list(title, rows, selected, top, now, empty_text)` (6 rows of 36 px, label + grey detail, blue highlight, scrollbar).
+- `screens.py`: draws screens as PIL images at 320×240 (landscape). Holds the `Track` dataclass, fonts and layout constants. Screens: `render_now_playing(track, volume, now=None)` and `render_list(title, rows, selected, top, now, empty_text)` (6 rows of 36 px, label + grey detail, blue highlight, scrollbar) and `render_radio(...)`. Frequencies are whole numbers in tenths of a MHz (`1057` = 105.7); `FM_MIN`/`FM_MAX` = 875/1080.
 - `library.py`: MusicBee-style library reading. `load_album_art(song_path, size)` checks for an image in the album folder (cover/folder/front/album/albumart, then any jpg/png), then art embedded in the tags (MP3/FLAC/M4A via mutagen). Results are cached with `lru_cache`. `scan_library()` reads `music/Artist/Album/` folder and file names only (fast); `read_tags()` gets title/genre/length when a song is played. Playlists are `.m3u`/`.m3u8` in `music/Playlists/`, matched on their last three path parts (Artist/Album/file, any case) so MusicBee's Windows paths work on the Pi.
-- `app.py`: the `App` class holds what's on screen (a stack of menu `Page`s, or now playing) and the play queue. Driven by four actions: `turn(step)`, `press()`, `back()`, `tick()`; `render()` returns the frame. Library: Artists → albums → songs, Albums → songs, Playlists → songs; picking a song plays it with the rest of that list as the queue. Now playing: turn = volume, press = play/pause, back = library.
+- `app.py`: the `App` class holds what's on screen (`screen` is menu, now playing or radio; menus are a stack of `Page`s), the play queue and the `Radio` state. Driven by four actions: `turn(step)`, `press()`, `back()`, `tick()`; `render()` returns the frame. Home → Music Library or Radio. Library: Artists → albums → songs, Albums → songs, Playlists → songs; picking a song plays it with the rest of that list as the queue. Now playing: turn = volume, press = play/pause, back = menus. Radio: see below. Favourites are the `FAVOURITES` list (105.7, 94.5). Opening the radio pauses the music.
 - `music/`: the library (empty for now, contents git-ignored). `music/Playlists/` for playlists.
 - `sample_data.py`: fake tracks pointing into `sample_music/`. No longer used by `desktop.py` or `pi.py`.
 - `desktop.py`: Tkinter simulator at 2× scale. Keys stand in for the knob: Up/Down or mouse wheel = turn, Enter/Space = press, Backspace/Left = hold (back), Esc = quit. Ticks once a second.
@@ -40,6 +40,16 @@ Music player for a Raspberry Pi 5 with a small SPI colour screen and physical bu
 - Right: Name (bold, wraps to 2 lines, then "..."), Album, Genre (grey, truncated). `m:ss/m:ss` is bottom-aligned with the art.
 - No progress bar or play/pause icon. The user asked for just the time text.
 
+## Radio screen layout
+
+Styled like an old wooden radio (colours in `screens.py`; the wood and dial are drawn once and cached by `radio_background()`).
+
+- Top bar: `VOL n%`, `FM RADIO`, clock, in brass on dark wood.
+- Cream tuning dial 87.5–108 MHz with a red needle; brass triangles mark favourites.
+- Amber readout of the frequency (unlit `188.8` behind it, "TUNING" lamp) and a 10-bar volume meter.
+- Push-button keys: TUNE, VOL, then each favourite (4 shown; scrolls if more). Turn picks a key (amber outline). Press TUNE or VOL to light it, then the knob tunes in 0.1 MHz steps or changes volume until pressed again (hold also stops). Pressing a favourite tunes to it; the tuned favourite stays pushed in. Hold = back to Home.
+- No SDR control yet: `Radio.frequency` is what the SDR code should tune to.
+
 ## Things to check on real hardware
 
 The simulator can't show these, so test on the Pi after each new screen:
@@ -53,4 +63,4 @@ The simulator can't show these, so test on the Pi after each new screen:
 - Menus are to be built in plain Python (scrollable lists, submenus, about 150–200 lines), not LVGL.
 - Music library uses MusicBee's layout: `Artist/Album/NN - Title.ext`.
 - The user prefers short, concise docs. Keep the README brief.
-- Possible additions that were offered but not requested yet: letter-jump or faster scrolling for long lists, album art thumbnails in lists, a clock-source indicator (NTP, RTC or `--:--`), and a set-time screen.
+- Possible additions that were offered but not requested yet: saving/removing favourites from the radio screen (and remembering them after restart), letter-jump or faster scrolling for long lists, album art thumbnails in lists, a clock-source indicator (NTP, RTC or `--:--`), and a set-time screen.

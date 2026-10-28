@@ -6,8 +6,10 @@ Keep Pi-only imports (board, digitalio, gpiozero, adafruit_*) out of this file
 so it runs the same on both machines.
 """
 
+import math
 from dataclasses import dataclass
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
@@ -32,6 +34,20 @@ MISSING_TEXT = (220, 60, 60)
 HIGHLIGHT = (40, 90, 160)
 SCROLLBAR = (110, 110, 110)
 
+# Radio colours: an old wooden set with a cream dial and amber display
+WOOD = (96, 58, 32)
+WOOD_DARK = (50, 29, 15)
+BRASS = (200, 164, 90)
+DIAL_FACE = (238, 224, 188)
+DIAL_INK = (70, 45, 25)
+NEEDLE = (205, 40, 30)
+AMBER = (255, 170, 40)
+AMBER_DIM = (75, 45, 15)
+DISPLAY_BG = (28, 16, 8)
+KEY_FACE = (232, 222, 196)
+KEY_SIDE = (140, 122, 95)
+KEY_PRESSED = (196, 184, 156)
+
 # Layout
 STATUS_HEIGHT = 24
 MARGIN = 12
@@ -43,6 +59,22 @@ INFO_WIDTH = WIDTH - INFO_LEFT - MARGIN
 VISIBLE_ROWS = 6
 ROW_HEIGHT = (HEIGHT - STATUS_HEIGHT) // VISIBLE_ROWS
 SCROLLBAR_WIDTH = 4
+
+# FM band, in tenths of a MHz so 1057 means 105.7 MHz (whole numbers avoid rounding errors)
+FM_MIN = 875
+FM_MAX = 1080
+DIAL = (MARGIN, 28, WIDTH - MARGIN - 1, 112)
+SCALE_LEFT = 30
+SCALE_RIGHT = WIDTH - 30
+SCALE_Y = 74
+FREQ_BOX = (MARGIN, 120, 196, 176)
+VOL_BOX = (204, 120, WIDTH - MARGIN - 1, 176)
+RADIO_KEYS_SHOWN = 4
+KEY_GAP = 8
+KEY_WIDTH = (WIDTH - 2 * MARGIN - (RADIO_KEYS_SHOWN - 1) * KEY_GAP) // RADIO_KEYS_SHOWN
+KEY_TOP = 186
+KEY_BOTTOM = 226
+KEY_DEPTH = 5  # how far a raised key sticks up
 
 
 @dataclass
@@ -92,6 +124,10 @@ def wrap_text(text, font, max_width, max_lines):
 
 def format_time(seconds):
     return f"{seconds // 60}:{seconds % 60:02d}"
+
+
+def format_mhz(tenths):
+    return f"{tenths // 10}.{tenths % 10}"
 
 
 def format_clock(now):
@@ -208,4 +244,111 @@ def render_list(title, rows, selected, top, now=None, empty_text="Nothing here")
         x = WIDTH - SCROLLBAR_WIDTH - 2
         draw.rectangle((x, thumb_top, x + SCROLLBAR_WIDTH - 1, thumb_top + thumb_height - 1), fill=SCROLLBAR)
 
+    return frame
+
+
+def dial_x(tenths):
+    """x position of a frequency on the tuning scale."""
+    return round(SCALE_LEFT + (tenths - FM_MIN) * (SCALE_RIGHT - SCALE_LEFT) / (FM_MAX - FM_MIN))
+
+
+@lru_cache(maxsize=1)
+def radio_background():
+    """The parts of the radio screen that never change, drawn once: wood, dial scale, display boxes."""
+    frame = Image.new("RGB", (WIDTH, HEIGHT), WOOD)
+    draw = ImageDraw.Draw(frame)
+
+    # Wood grain: rows of slightly lighter and darker brown in uneven waves
+    for y in range(HEIGHT):
+        shade = int(9 * math.sin(y * 0.31 + 3 * math.sin(y * 0.047)) + 4 * math.sin(y * 1.7))
+        draw.line((0, y, WIDTH - 1, y), fill=tuple(max(0, c + shade) for c in WOOD))
+    draw.rectangle((0, 0, WIDTH - 1, 21), fill=WOOD_DARK)
+    draw.line((0, 22, WIDTH - 1, 22), fill=BRASS)
+
+    # Dial: cream face, brass rim, scale ticks every 0.5 MHz with numbers every 4 MHz
+    draw.rounded_rectangle(DIAL, radius=6, fill=DIAL_FACE, outline=BRASS, width=2)
+    number_font = load_font(12, bold=True)
+    for tenths in range(880, FM_MAX + 1, 5):
+        x = dial_x(tenths)
+        length = 14 if tenths % 40 == 0 else 9 if tenths % 10 == 0 else 5
+        draw.line((x, SCALE_Y - length, x, SCALE_Y), fill=DIAL_INK)
+        if tenths % 40 == 0:
+            draw.text((x, SCALE_Y + 5), str(tenths // 10), font=number_font, fill=DIAL_INK, anchor="mt")
+    draw.line((SCALE_LEFT, SCALE_Y, SCALE_RIGHT, SCALE_Y), fill=DIAL_INK)
+    small_font = load_font(10, bold=True)
+    draw.text((DIAL[0] + 8, DIAL[1] + 6), "FM", font=small_font, fill=DIAL_INK)
+    draw.text((DIAL[2] - 8, DIAL[1] + 6), "MHz", font=small_font, fill=DIAL_INK, anchor="ra")
+
+    for box in (FREQ_BOX, VOL_BOX):
+        draw.rounded_rectangle(box, radius=5, fill=DISPLAY_BG, outline=BRASS, width=2)
+    return frame
+
+
+def draw_radio_key(draw, left, label, focused, pressed, lit):
+    """A push-button key. Raised normally, sunk in when pressed, amber when lit (being adjusted)."""
+    right = left + KEY_WIDTH - 1
+    draw.rounded_rectangle((left, KEY_TOP + KEY_DEPTH, right, KEY_BOTTOM + KEY_DEPTH), radius=4, fill=KEY_SIDE)
+    top = KEY_TOP + (KEY_DEPTH - 1 if pressed or lit else 0)
+    face = AMBER if lit else KEY_PRESSED if pressed else KEY_FACE
+    box = (left, top, right, top + KEY_BOTTOM - KEY_TOP)
+    draw.rounded_rectangle(box, radius=4, fill=face,
+                           outline=AMBER if focused and not lit else None, width=3)
+    if focused and lit:
+        draw.rounded_rectangle(box, radius=4, outline=DISPLAY_BG, width=2)
+    draw.text((left + KEY_WIDTH // 2, (box[1] + box[3]) // 2), label,
+              font=load_font(14, bold=True), fill=DIAL_INK, anchor="mm")
+
+
+def render_radio(frequency, favourites, keys, focus, adjusting, volume, now=None):
+    """
+    Old-school FM radio. frequency and favourites are in tenths of a MHz.
+    keys are the labels along the bottom; focus is the selected one, and
+    adjusting is True while the knob is turning the focused key's setting.
+    """
+    now = now or datetime.now()
+    frame = radio_background().copy()
+    draw = ImageDraw.Draw(frame)
+
+    header_font = load_font(12, bold=True)
+    draw.text((MARGIN, 11), f"VOL {volume}%", font=header_font, fill=BRASS, anchor="lm")
+    draw.text((WIDTH // 2, 11), "FM RADIO", font=header_font, fill=BRASS, anchor="mm")
+    draw.text((WIDTH - MARGIN, 11), format_clock(now), font=header_font, fill=BRASS, anchor="rm")
+
+    # Favourites marked above the scale, then the red needle
+    for favourite in favourites:
+        x = dial_x(favourite)
+        draw.polygon(((x - 4, 44), (x + 4, 44), (x, 50)), fill=BRASS)
+    x = dial_x(frequency)
+    draw.rectangle((x - 1, DIAL[1] + 4, x + 1, DIAL[3] - 4), fill=NEEDLE)
+
+    # Frequency readout, with unlit "188.8" segments behind it like an old display
+    tuning = adjusting and keys[focus] == "TUNE"
+    draw.text((FREQ_BOX[0] + 8, FREQ_BOX[1] + 6), "TUNING", font=load_font(9, bold=True),
+              fill=AMBER if tuning else AMBER_DIM)
+    digit_font = load_font(34, bold=True)
+    digits_right = FREQ_BOX[2] - 44
+    draw.text((digits_right, FREQ_BOX[3] - 8), "188.8", font=digit_font, fill=AMBER_DIM, anchor="rs")
+    draw.text((digits_right, FREQ_BOX[3] - 8), format_mhz(frequency), font=digit_font, fill=AMBER, anchor="rs")
+    draw.text((digits_right + 6, FREQ_BOX[3] - 8), "MHz", font=load_font(12, bold=True), fill=AMBER, anchor="ls")
+
+    # Volume: ten bars that light up
+    adjusting_volume = adjusting and keys[focus] == "VOL"
+    draw.text(((VOL_BOX[0] + VOL_BOX[2]) // 2, VOL_BOX[1] + 6), "VOLUME", font=load_font(9, bold=True),
+              fill=AMBER if adjusting_volume else AMBER_DIM, anchor="mt")
+    bar_width = 7
+    bars_left = (VOL_BOX[0] + VOL_BOX[2]) // 2 - (10 * bar_width + 9 * 2) // 2
+    for i in range(10):
+        left = bars_left + i * (bar_width + 2)
+        height = 8 + i * 2
+        lit = volume >= (i + 1) * 10
+        draw.rectangle((left, VOL_BOX[3] - 8 - height, left + bar_width - 1, VOL_BOX[3] - 8),
+                       fill=AMBER if lit else AMBER_DIM)
+
+    # Keys along the bottom; if there are too many to fit, the focused one stays in view
+    first = max(0, min(focus - RADIO_KEYS_SHOWN + 1, len(keys) - RADIO_KEYS_SHOWN))
+    for i, label in enumerate(keys[first:first + RADIO_KEYS_SHOWN]):
+        index = first + i
+        left = MARGIN + i * (KEY_WIDTH + KEY_GAP)
+        pressed = label == format_mhz(frequency)  # the favourite that's tuned in stays pushed down
+        draw_radio_key(draw, left, label, index == focus, pressed, adjusting and index == focus)
     return frame

@@ -1,6 +1,6 @@
 # RaspiMusicPlayer
 
-Raspberry Pi music player with a 240×320 ST7789 SPI screen. Screens are designed in a simulator on a computer, and the same code runs on the Pi.
+Raspberry Pi music player and FM radio with a 240×320 ST7789 SPI screen. Screens are designed in a simulator on a computer, and the same code runs on the Pi.
 
 ## Wiring (BCM)
 
@@ -8,7 +8,7 @@ Screen: VCC → 3.3V · GND → GND · CS → GPIO8 (CE0) · RESET → GPIO25 ·
 
 Rotary knob: CLK → GPIO5 · DT → GPIO6 · SW → GPIO13 · + → 3.3V · GND → GND
 
-Turn to scroll (or change volume while playing), press to select (or play/pause), hold to go back.
+Turn to scroll (or change volume while playing), press to select (or play/pause), hold to go back. On the radio, turn to pick a key and press it; TUNE and VOL then follow the knob until pressed again.
 
 ## Pi setup
 
@@ -49,6 +49,10 @@ Up/Down or the mouse wheel turn the knob, Enter presses it, Backspace holds it (
 ## Music library
 
 Put music in `music/` using MusicBee's folder layout: `Artist/Album/01 - Title.mp3`. Playlists (`.m3u`) go in `music/Playlists/`. The music isn't stored in git, so copy it onto the Pi separately. Album art comes from an image in the album folder (e.g. `cover.jpg` or `folder.jpg`), or else from art embedded in the song file.
+
+## Radio
+
+Favourite stations are in `FAVOURITES` in `app.py`. The SDR isn't connected to the screen yet.
 
 ## Troubleshooting
 
